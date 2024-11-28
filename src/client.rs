@@ -38,7 +38,7 @@ impl UnauthorizedClient {
             secret:
                 WebClientSecret {
                     client_id,
-                    auth_url,
+                    auth_uri,
                     ..
                 },
             config:
@@ -59,7 +59,7 @@ impl UnauthorizedClient {
             // TODO: add state
         ]
         .join("&");
-        format!("{auth_url}?{query}")
+        format!("{auth_uri}?{query}")
     }
 }
 

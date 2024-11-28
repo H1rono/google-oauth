@@ -2,12 +2,13 @@ use std::{borrow::Cow, fmt, str::FromStr};
 
 use serde::{de, Deserialize, Serialize};
 
+use crate::scope::{self, BoxScope, Scope};
 use crate::secret::WebClientSecret;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub redirect_uri: String,
-    pub scope: Vec<String>,
+    pub scope: BoxScope,
 }
 
 #[derive(Clone)]
@@ -55,7 +56,7 @@ impl UnauthorizedClient {
         } = self;
         let client_id = encode!(client_id);
         let redirect_uri = encode!(redirect_uri);
-        let scope = encode!(scope.join(" "));
+        let scope = encode!(scope.scope().into_iter().collect::<Vec<_>>().join(" "));
         let query = [
             format!("client_id={client_id}"),
             format!("redirect_uri={redirect_uri}"),
@@ -104,18 +105,30 @@ impl UnauthorizedClient {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct UnauthorizedClientBuilder {
+#[derive(Clone)]
+pub struct UnauthorizedClientBuilder<S = scope::NoScope> {
     redirect_uri: Option<String>,
-    scope: Vec<String>,
+    scope: S,
     secret: Option<WebClientSecret>,
 }
 
-impl UnauthorizedClientBuilder {
+impl UnauthorizedClientBuilder<scope::NoScope> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            redirect_uri: None,
+            scope: scope::NoScope,
+            secret: None,
+        }
     }
+}
 
+impl Default for UnauthorizedClientBuilder<scope::NoScope> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<S1> UnauthorizedClientBuilder<S1> {
     pub fn redirect_uri<'s, S>(self, uri: S) -> Self
     where
         S: Into<Cow<'s, str>>,
@@ -127,22 +140,38 @@ impl UnauthorizedClientBuilder {
         }
     }
 
-    pub fn add_scope<'s, S>(mut self, scope: S) -> Self
+    pub fn add_scope<S2>(self, s2: S2) -> UnauthorizedClientBuilder<scope::With<S1, S2>>
     where
-        S: Into<Cow<'s, str>>,
+        S1: Scope,
+        S2: Scope,
     {
-        let scope = scope.into().into_owned();
-        self.scope.push(scope);
-        self
+        let Self {
+            redirect_uri,
+            scope,
+            secret,
+        } = self;
+        let scope = scope.with(s2);
+        UnauthorizedClientBuilder {
+            redirect_uri,
+            scope,
+            secret,
+        }
     }
 
-    pub fn scope<'s, S, E>(self, scope: S) -> Self
+    pub fn scope<S>(self, scope: S) -> UnauthorizedClientBuilder<S>
     where
-        S: IntoIterator<Item = E> + 's,
-        E: Into<Cow<'s, str>>,
+        S: Scope + Clone,
     {
-        let scope = scope.into_iter().map(|e| e.into().into_owned()).collect();
-        Self { scope, ..self }
+        let Self {
+            redirect_uri,
+            secret,
+            ..
+        } = self;
+        UnauthorizedClientBuilder {
+            redirect_uri,
+            scope,
+            secret,
+        }
     }
 
     pub fn secret(self, secret: &WebClientSecret) -> Self {
@@ -153,7 +182,10 @@ impl UnauthorizedClientBuilder {
         }
     }
 
-    pub fn build(self) -> anyhow::Result<UnauthorizedClient> {
+    pub fn build(self) -> anyhow::Result<UnauthorizedClient>
+    where
+        S1: Scope + Clone,
+    {
         use anyhow::anyhow;
 
         let Self {
@@ -162,6 +194,7 @@ impl UnauthorizedClientBuilder {
             secret,
         } = self;
         let redirect_uri = redirect_uri.ok_or_else(|| anyhow!("redirect_uri is required"))?;
+        let scope = scope.into_boxed();
         let secret = secret.ok_or_else(|| anyhow!("secret is required"))?;
         let config = ClientConfig {
             redirect_uri,

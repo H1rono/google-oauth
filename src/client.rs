@@ -1,6 +1,6 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt, str::FromStr};
 
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 
 use crate::secret::WebClientSecret;
 
@@ -129,4 +129,160 @@ impl UnauthorizedClientBuilder {
         let client = UnauthorizedClient::new(secret, config);
         Ok(client)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AuthorizationCode(());
+
+struct AuthorizationCodeVisitor;
+
+impl AuthorizationCode {
+    pub const STR: &'static str = "authorization_code";
+
+    pub fn new() -> Self {
+        Self(())
+    }
+}
+
+impl fmt::Display for AuthorizationCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(Self::STR)
+    }
+}
+
+impl FromStr for AuthorizationCode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == Self::STR {
+            return Ok(Self::new());
+        }
+        Err("not authorization_code")
+    }
+}
+
+impl Serialize for AuthorizationCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(Self::STR)
+    }
+}
+
+impl<'de> Deserialize<'de> for AuthorizationCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(AuthorizationCodeVisitor)
+    }
+}
+
+impl<'de> de::Visitor<'de> for AuthorizationCodeVisitor {
+    type Value = AuthorizationCode;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(r#"a str "authorization_code""#)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse().map_err(E::custom)
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TokenRequest<'a> {
+    #[serde(borrow)]
+    client_id: Cow<'a, str>,
+    #[serde(borrow)]
+    client_secret: Cow<'a, str>,
+    #[serde(borrow)]
+    code: Cow<'a, str>,
+    grant_type: AuthorizationCode,
+    #[serde(borrow)]
+    redirect_uri: Cow<'a, str>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Bearer(());
+
+struct BearerVisitor;
+
+impl Bearer {
+    pub const STR: &'static str = "Bearer";
+
+    fn new() -> Self {
+        Self(())
+    }
+}
+
+impl fmt::Display for Bearer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(Self::STR)
+    }
+}
+
+impl FromStr for Bearer {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == Self::STR {
+            Ok(Self::new())
+        } else {
+            Err("not Bearer")
+        }
+    }
+}
+
+impl Serialize for Bearer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(Self::STR)
+    }
+}
+
+impl<'de> Deserialize<'de> for Bearer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(BearerVisitor)
+    }
+}
+
+impl<'de> de::Visitor<'de> for BearerVisitor {
+    type Value = Bearer;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(r#"a str "Bearer""#)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse().map_err(E::custom)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub struct TokenResponse {
+    access_token: String,
+    expires_in: u32,
+    #[serde(default)]
+    refresh_token: Option<String>,
+    scope: String,
+    token_type: Bearer,
+}
+
+#[derive(Clone)]
+pub struct AuthorizedClient {
+    secrets: WebClientSecret,
+    token: TokenResponse,
 }

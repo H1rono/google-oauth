@@ -14,11 +14,16 @@ pub struct ClientConfig {
 pub struct UnauthorizedClient {
     secret: WebClientSecret,
     config: ClientConfig,
+    client: reqwest::Client,
 }
 
 impl UnauthorizedClient {
     pub fn new(secret: WebClientSecret, config: ClientConfig) -> Self {
-        Self { secret, config }
+        Self {
+            secret,
+            config,
+            client: Default::default(),
+        }
     }
 
     pub fn builder() -> UnauthorizedClientBuilder {
@@ -46,6 +51,7 @@ impl UnauthorizedClient {
                     redirect_uri,
                     scope,
                 },
+            ..
         } = self;
         let client_id = encode!(client_id);
         let redirect_uri = encode!(redirect_uri);
@@ -60,6 +66,41 @@ impl UnauthorizedClient {
         ]
         .join("&");
         format!("{auth_uri}?{query}")
+    }
+
+    pub async fn authorize_with<'a, S>(&'a self, code: S) -> anyhow::Result<AuthorizedClient>
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        let Self {
+            secret,
+            config: ClientConfig { redirect_uri, .. },
+            ..
+        } = self;
+        let WebClientSecret {
+            client_id,
+            token_uri,
+            client_secret,
+            ..
+        } = secret;
+        let request = TokenRequest {
+            client_id: client_id.into(),
+            client_secret: client_secret.into(),
+            code: code.into(),
+            grant_type: AuthorizationCode::new(),
+            redirect_uri: redirect_uri.into(),
+        };
+        let request = self
+            .client
+            .post(token_uri)
+            .header(
+                http::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
+            .body(request.urlencoded());
+        let response: TokenResponse = request.send().await?.json().await?;
+        let authorized = AuthorizedClient::new(secret.clone(), response);
+        Ok(authorized)
     }
 }
 
@@ -195,7 +236,7 @@ impl<'de> de::Visitor<'de> for AuthorizationCodeVisitor {
 }
 
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TokenRequest<'a> {
+struct TokenRequest<'a> {
     #[serde(borrow)]
     client_id: Cow<'a, str>,
     #[serde(borrow)]
@@ -205,6 +246,32 @@ pub struct TokenRequest<'a> {
     grant_type: AuthorizationCode,
     #[serde(borrow)]
     redirect_uri: Cow<'a, str>,
+}
+
+impl<'a> TokenRequest<'a> {
+    pub fn urlencoded(self) -> String {
+        macro_rules! encode_queries {
+            [ $($i:ident),+ ] => {
+                [$(
+                    format!(
+                        concat!(stringify!($i), "={}"),
+                        ::percent_encoding::utf8_percent_encode(& $i, ::percent_encoding::NON_ALPHANUMERIC)
+                    )
+                ),+]
+            };
+        }
+
+        let Self {
+            client_id,
+            client_secret,
+            code,
+            grant_type,
+            redirect_uri,
+        } = self;
+        let grant_type = grant_type.to_string();
+        let params = encode_queries![client_id, client_secret, code, grant_type, redirect_uri];
+        params.join("&")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -283,6 +350,26 @@ pub struct TokenResponse {
 
 #[derive(Clone)]
 pub struct AuthorizedClient {
-    secrets: WebClientSecret,
+    #[allow(dead_code)]
+    secret: WebClientSecret,
     token: TokenResponse,
+    inner: reqwest::Client,
+}
+
+impl AuthorizedClient {
+    fn new(secret: WebClientSecret, token: TokenResponse) -> Self {
+        let inner = reqwest::Client::new();
+        Self {
+            secret,
+            token,
+            inner,
+        }
+    }
+
+    pub fn new_request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
+        let url = format!("https://www.googleapis.com{uri}");
+        self.inner
+            .request(method, url)
+            .bearer_auth(&self.token.access_token)
+    }
 }

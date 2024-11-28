@@ -411,6 +411,10 @@ impl AuthorizedClient {
         }
     }
 
+    pub fn token(&self) -> &TokenResponse {
+        &self.token
+    }
+
     pub fn request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
         let url = format!("{}{uri}", Self::BASE_URL);
         self.inner

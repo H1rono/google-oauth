@@ -38,7 +38,9 @@ async fn main() -> anyhow::Result<()> {
     let (code, ()) = tokio::try_join!(wait_code, serve)?;
 
     let client = client.authorize_with(code).await?;
-    check_client(&client).await?;
+    let export = export_token(&client);
+    let check = check_client(&client);
+    tokio::try_join!(export, check)?;
     Ok(())
 }
 
@@ -100,6 +102,15 @@ async fn callback(
         return (http::StatusCode::INTERNAL_SERVER_ERROR, "channel error");
     };
     (http::StatusCode::OK, "authorized")
+}
+
+#[tracing::instrument(skip_all)]
+async fn export_token(client: &AuthorizedClient) -> anyhow::Result<()> {
+    let token = client.token();
+    let token = serde_json::to_string_pretty(token)?;
+    tokio::fs::write("tmp/authorized_token.json", token).await?;
+    tracing::info!("exported token to tmp/authorized_token.json");
+    Ok(())
 }
 
 #[tracing::instrument(skip_all)]

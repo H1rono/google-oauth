@@ -357,6 +357,8 @@ pub struct AuthorizedClient {
 }
 
 impl AuthorizedClient {
+    pub const BASE_URL: &'static str = "https://www.googleapis.com";
+
     fn new(secret: WebClientSecret, token: TokenResponse) -> Self {
         let inner = reqwest::Client::new();
         Self {
@@ -367,7 +369,7 @@ impl AuthorizedClient {
     }
 
     pub fn new_request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
-        let url = format!("https://www.googleapis.com{uri}");
+        let url = format!("{}{uri}", Self::BASE_URL);
         self.inner
             .request(method, url)
             .bearer_auth(&self.token.access_token)

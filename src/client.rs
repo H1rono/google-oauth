@@ -63,7 +63,7 @@ impl UnauthorizedClient {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Default)]
 pub struct UnauthorizedClientBuilder {
     redirect_uri: Option<String>,
     scope: Vec<String>,

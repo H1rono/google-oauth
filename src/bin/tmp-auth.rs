@@ -1,14 +1,10 @@
 use std::{future::IntoFuture, net::SocketAddr};
 
-use axum::{
-    extract::{Query, State},
-    routing,
-};
+use anyhow::anyhow;
+use axum::extract::{Query, State};
+use futures::{FutureExt, TryFutureExt};
 use serde::{Deserialize, Serialize};
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, oneshot},
-};
+use tokio::sync::{mpsc, oneshot};
 use tracing_subscriber::EnvFilter;
 
 use google_oauth::{AuthorizedClient, ClientSecret, UnauthorizedClient};
@@ -23,6 +19,54 @@ async fn main() -> anyhow::Result<()> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
+    let client = unauthorized_client().await?;
+    tracing::info!("authorize url: {}", client.generate_url());
+
+    let (code_tx, mut code_rx) = mpsc::unbounded_channel();
+    let state = AppState { code_tx };
+    let layer = tower::ServiceBuilder::new().layer(tower_http::trace::TraceLayer::new_for_http());
+    let router = make_router(state).layer(layer);
+    let addr = bind_addr()?;
+    tracing::info!("listening on {addr}");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let wait_code = code_rx.recv().map(move |c| {
+        shutdown_tx
+            .send(())
+            .map_err(|()| anyhow!("failed to signal shutdown"))?;
+        c.ok_or_else(|| anyhow!("received no authorization code"))
+    });
+    let shutdown = shutdown_signal(shutdown_rx);
+    let serve = axum::serve(listener, router).with_graceful_shutdown(shutdown);
+    let serve = tokio::spawn(serve.into_future())
+        .map_err(anyhow::Error::new)
+        .and_then(|r| async move { r.map_err(anyhow::Error::new) });
+    let (code, ()) = tokio::try_join!(wait_code, serve)?;
+
+    let client = client.authorize_with(code).await?;
+    check_client(&client).await?;
+    Ok(())
+}
+
+fn bind_addr() -> anyhow::Result<SocketAddr> {
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()?;
+    let addr: SocketAddr = ([0, 0, 0, 0], port).into();
+    Ok(addr)
+}
+
+fn make_router(state: AppState) -> axum::Router {
+    use axum::routing;
+
+    axum::Router::new()
+        .route("/oauth2/callback", routing::get(callback))
+        .with_state(state)
+}
+
+#[tracing::instrument]
+async fn unauthorized_client() -> anyhow::Result<UnauthorizedClient> {
     let secret_file = tokio::fs::File::open("tmp/client_secret.json").await?;
     let secret = ClientSecret::read_from_file(secret_file).await?;
     let client = UnauthorizedClient::builder()
@@ -31,46 +75,17 @@ async fn main() -> anyhow::Result<()> {
         .add_scope("https://www.googleapis.com/auth/calendar.readonly")
         .secret(&secret.web)
         .build()?;
-    tracing::info!("authorize url: {}", client.generate_url());
+    Ok(client)
+}
 
-    let (code_tx, mut code_rx) = mpsc::unbounded_channel();
-    let state = AppState { code_tx };
-    let port = std::env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("listening on {addr}");
-    let layer = tower::ServiceBuilder::new().layer(tower_http::trace::TraceLayer::new_for_http());
-    let router = axum::Router::new()
-        .route("/oauth2/callback", routing::get(callback))
-        .with_state(state)
-        .layer(layer);
-    let listener = TcpListener::bind(addr).await?;
-
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let wait_code = async {
-        let code = code_rx.recv().await;
-        if let Err(()) = shutdown_tx.send(()) {
-            tracing::error!("failed to send shutdown");
-            unreachable!()
+#[tracing::instrument(skip_all)]
+async fn shutdown_signal(rx: oneshot::Receiver<()>) {
+    match rx.await {
+        Ok(()) => (),
+        Err(e) => {
+            tracing::error!(%e, "shutdown signal error");
         }
-        code
-    };
-    let serve = axum::serve(listener, router).with_graceful_shutdown(async move {
-        match shutdown_rx.await {
-            Ok(()) => {}
-            Err(e) => tracing::error!(%e, "shutdown signal error"),
-        }
-    });
-    let serve = tokio::spawn(serve.into_future());
-    let Some(code) = wait_code.await else {
-        anyhow::bail!("received no authorization code");
-    };
-    serve.await??;
-
-    let client = client.authorize_with(code).await?;
-    check_client(&client).await?;
-    Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

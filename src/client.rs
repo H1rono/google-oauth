@@ -356,6 +356,16 @@ pub struct AuthorizedClient {
     inner: reqwest::Client,
 }
 
+macro_rules! request_fn {
+    ($m:ident) => {
+        ::paste::paste! {
+            pub fn [<  $m:snake:lower >] (&self, uri: &str) -> ::reqwest::RequestBuilder {
+                self.request(::http::Method::[< $m:snake:upper >], uri)
+            }
+        }
+    };
+}
+
 impl AuthorizedClient {
     pub const BASE_URL: &'static str = "https://www.googleapis.com";
 
@@ -368,10 +378,16 @@ impl AuthorizedClient {
         }
     }
 
-    pub fn new_request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
+    pub fn request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
         let url = format!("{}{uri}", Self::BASE_URL);
         self.inner
             .request(method, url)
             .bearer_auth(&self.token.access_token)
     }
+
+    request_fn! {get}
+    request_fn! {post}
+    request_fn! {patch}
+    request_fn! {put}
+    request_fn! {delete}
 }

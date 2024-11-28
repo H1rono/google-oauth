@@ -105,7 +105,7 @@ async fn callback(
 #[tracing::instrument(skip_all)]
 async fn check_client(client: &AuthorizedClient) -> anyhow::Result<()> {
     let res = client
-        .new_request(http::Method::GET, "/calendar/v3/users/me/calendarList")
+        .get("/calendar/v3/users/me/calendarList")
         .send()
         .await?;
     tracing::info!(status = ?res.status(), headers = ?res.headers());

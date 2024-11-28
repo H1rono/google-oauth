@@ -39,9 +39,7 @@ async fn main() -> anyhow::Result<()> {
     });
     let shutdown = shutdown_signal(shutdown_rx);
     let serve = axum::serve(listener, router).with_graceful_shutdown(shutdown);
-    let serve = tokio::spawn(serve.into_future())
-        .map_err(anyhow::Error::new)
-        .and_then(|r| async move { r.map_err(anyhow::Error::new) });
+    let serve = serve.into_future().map_err(anyhow::Error::new);
     let (code, ()) = tokio::try_join!(wait_code, serve)?;
 
     let client = client.authorize_with(code).await?;

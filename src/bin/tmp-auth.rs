@@ -73,11 +73,11 @@ async fn wait_code_with_notify(
 #[tracing::instrument]
 async fn unauthorized_client() -> anyhow::Result<UnauthorizedClient> {
     let secret_file = tokio::fs::File::open("tmp/client_secret.json").await?;
+    let scope = google_oauth::combine_scope![calendar, calendar.readonly];
     let secret = ClientSecret::read_from_file(secret_file).await?;
     let client = UnauthorizedClient::builder()
         .redirect_uri("http://localhost:8080/oauth2/callback")
-        .add_scope("https://www.googleapis.com/auth/calendar")
-        .add_scope("https://www.googleapis.com/auth/calendar.readonly")
+        .scope(scope)
         .secret(&secret.web)
         .build()?;
     Ok(client)

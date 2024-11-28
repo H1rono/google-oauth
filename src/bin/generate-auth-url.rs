@@ -6,7 +6,7 @@ async fn main() -> anyhow::Result<()> {
     let secret = ClientSecret::read_from_file(secret_file).await?;
     let client = UnauthorizedClient::builder()
         .redirect_uri("http://localhost:8080/oauth2/callback")
-        .add_scope("https://www.googleapis.com/auth/calendar")
+        .add_scope(google_oauth::scope::Calendar)
         .secret(&secret.web)
         .build()?;
     println!("{}", client.generate_url());

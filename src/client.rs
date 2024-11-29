@@ -2,13 +2,13 @@ use std::{borrow::Cow, fmt, str::FromStr};
 
 use serde::{de, Deserialize, Serialize};
 
-use crate::scope::{self, BoxScope, Scope};
+use crate::scope::{self, Scope, SpaceDelimitedScope};
 use crate::secret::WebClientSecret;
 
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub redirect_uri: String,
-    pub scope: BoxScope,
+    pub scope: SpaceDelimitedScope,
 }
 
 #[derive(Clone)]
@@ -56,8 +56,7 @@ impl UnauthorizedClient {
         } = self;
         let client_id = encode!(client_id);
         let redirect_uri = encode!(redirect_uri);
-        let scope = scope.scope_str().into_iter().collect::<Vec<_>>().join(" ");
-        let scope = encode!(scope);
+        let scope = encode!(scope.to_string());
         let query = [
             format!("client_id={client_id}"),
             format!("redirect_uri={redirect_uri}"),
@@ -195,7 +194,7 @@ impl<S1> UnauthorizedClientBuilder<S1> {
             secret,
         } = self;
         let redirect_uri = redirect_uri.ok_or_else(|| anyhow!("redirect_uri is required"))?;
-        let scope = scope.into_boxed();
+        let scope = scope.space_delimited();
         let secret = secret.ok_or_else(|| anyhow!("secret is required"))?;
         let config = ClientConfig {
             redirect_uri,
@@ -378,7 +377,7 @@ pub struct TokenResponse {
     expires_in: u32,
     #[serde(default)]
     refresh_token: Option<String>,
-    scope: String,
+    scope: SpaceDelimitedScope,
     token_type: Bearer,
 }
 

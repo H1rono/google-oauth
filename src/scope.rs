@@ -11,6 +11,8 @@ macro_rules! box_scope {
 }
 
 pub trait SingleScope: private::Sealed + Send + Sync + 'static {
+    fn as_dyn(&self) -> &'static dyn SingleScope;
+
     fn as_str(&self) -> &'static str;
 }
 
@@ -141,6 +143,10 @@ macro_rules! scope {
         impl private::Sealed for [< $i0:camel $( $i:camel )* >] {}
 
         impl SingleScope for [< $i0:camel $( $i:camel )* >] {
+            fn as_dyn(&self) -> &'static dyn SingleScope {
+                &Self
+            }
+
             fn as_str(&self) -> &'static str {
                 Self::STR
             }

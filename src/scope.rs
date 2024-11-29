@@ -42,6 +42,10 @@ pub trait Scope: private::Sealed + Send + Sync + 'static {
 
     fn boxed_clone(&self) -> BoxScope;
 
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        self.scope().into_iter().collect::<Vec<_>>().into()
+    }
+
     fn with<S: Scope>(self, scope: S) -> With<Self, S>
     where
         Self: Sized,
@@ -163,6 +167,10 @@ impl Scope for DynSingleScope {
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(*self)
     }
+
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        vec![*self].into()
+    }
 }
 
 struct DynSingleScopeVisitor;
@@ -206,6 +214,11 @@ impl Scope for NoScope {
     #[inline]
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(*self)
+    }
+
+    #[inline]
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        Default::default()
     }
 }
 
@@ -288,6 +301,11 @@ impl Scope for SpaceDelimitedScope {
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(self.clone())
     }
+
+    #[inline]
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        self.clone()
+    }
 }
 
 struct SpaceDelimitedScopeVisitor;
@@ -312,18 +330,27 @@ pub struct BoxScope(Box<dyn Scope>);
 impl private::Sealed for BoxScope {}
 
 impl Scope for BoxScope {
+    #[inline]
     fn scope(&self) -> HashSet<DynSingleScope> {
         self.0.scope()
     }
 
+    #[inline]
     fn scope_str(&self) -> HashSet<&'static str> {
         self.0.scope_str()
     }
 
+    #[inline]
     fn boxed_clone(&self) -> BoxScope {
         self.0.boxed_clone()
     }
 
+    #[inline]
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        self.0.space_delimited()
+    }
+
+    #[inline]
     fn into_boxed(self) -> BoxScope
     where
         Self: Sized,
@@ -358,21 +385,29 @@ where
     fn scope(&self) -> HashSet<DynSingleScope> {
         let Self(a, b) = self;
         let mut scope_a = a.scope();
-        let scope_b = b.scope();
-        scope_a.extend(scope_b);
+        let mut scope_b = b.scope();
+        scope_a.extend(scope_b.drain());
         scope_a
     }
 
     fn scope_str(&self) -> HashSet<&'static str> {
         let Self(a, b) = self;
         let mut scope_a = a.scope_str();
-        let scope_b = b.scope_str();
-        scope_a.extend(scope_b);
+        let mut scope_b = b.scope_str();
+        scope_a.extend(scope_b.drain());
         scope_a
     }
 
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(self.clone())
+    }
+
+    fn space_delimited(&self) -> SpaceDelimitedScope {
+        let Self(a, b) = self;
+        let SpaceDelimitedScope(mut scope_a) = a.space_delimited();
+        let SpaceDelimitedScope(mut scope_b) = b.space_delimited();
+        scope_a.append(&mut scope_b);
+        scope_a.into()
     }
 }
 
@@ -418,14 +453,17 @@ macro_rules! scope {
         impl private::Sealed for [< $i0:camel $( $i:camel )* >] {}
 
         impl SingleScope for [< $i0:camel $( $i:camel )* >] {
+            #[inline]
             fn as_any(&self) -> &dyn Any {
                 self
             }
 
+            #[inline]
             fn as_dyn(&self) -> DynSingleScope {
                 DynSingleScope(&Self)
             }
 
+            #[inline]
             fn as_str(&self) -> &'static str {
                 Self::STR
             }
@@ -456,6 +494,10 @@ macro_rules! scope {
 
             fn boxed_clone(&self) -> BoxScope {
                 box_scope!(*self)
+            }
+
+            fn space_delimited(&self) -> SpaceDelimitedScope {
+                vec![self.as_dyn()].into()
             }
         }
 

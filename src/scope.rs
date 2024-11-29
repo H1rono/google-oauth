@@ -70,6 +70,12 @@ impl Hash for DynSingleScope {
     }
 }
 
+impl fmt::Display for DynSingleScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl From<&'static dyn SingleScope> for DynSingleScope {
     fn from(value: &'static dyn SingleScope) -> Self {
         Self(value)
@@ -148,6 +154,13 @@ impl Scope for BoxScope {
 
     fn boxed_clone(&self) -> BoxScope {
         self.0.boxed_clone()
+    }
+
+    fn into_boxed(self) -> BoxScope
+    where
+        Self: Sized,
+    {
+        self
     }
 }
 

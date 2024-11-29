@@ -140,6 +140,18 @@ macro_rules! scope {
             }
         }
 
+        impl ::std::str::FromStr for [< $i0:camel $( $i:camel )* >] {
+            type Err = String;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                if s == Self::STR {
+                    Ok(Self)
+                } else {
+                    Err(format!("expected {}", Self::STR))
+                }
+            }
+        }
+
         impl private::Sealed for [< $i0:camel $( $i:camel )* >] {}
 
         impl SingleScope for [< $i0:camel $( $i:camel )* >] {
@@ -163,6 +175,41 @@ macro_rules! scope {
 
             fn boxed_clone(&self) -> BoxScope {
                 box_scope!(*self)
+            }
+        }
+
+        impl ::serde::Serialize for [< $i0:camel $( $i:camel )* >] {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: ::serde::Serializer,
+            {
+                serializer.serialize_str(Self::STR)
+            }
+        }
+
+        impl<'de> ::serde::Deserialize<'de> for [< $i0:camel $( $i:camel )* >] {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: ::serde::de::Deserializer<'de>,
+            {
+                deserializer.deserialize_str([< $i0:camel $( $i:camel )* Visitor >])
+            }
+        }
+
+        struct [< $i0:camel $( $i:camel )* Visitor >];
+
+        impl<'de> ::serde::de::Visitor<'de> for [< $i0:camel $( $i:camel )* Visitor >] {
+            type Value = [< $i0:camel $( $i:camel )* >];
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(formatter, r#"a str "{}""#, [< $i0:camel $( $i:camel )* >]::STR)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: ::serde::de::Error,
+            {
+                v.parse().map_err(E::custom)
             }
         }
     )+ } };

@@ -224,7 +224,7 @@ macro_rules! scope {
                 $(, ".", stringify!($i))*
             );
 
-            pub fn new() -> Self {
+            pub const fn new() -> Self {
                 Self
             }
         }
@@ -268,8 +268,8 @@ macro_rules! scope {
 
             fn hash_value(&self) -> u64 {
                 let mut hasher = ::std::hash::DefaultHasher::new();
-                ::std::hash::Hash::hash(self, &mut hasher);
-                ::std::hash::Hasher::finish(&hasher)
+                self.hash(&mut hasher);
+                hasher.finish()
             }
         }
 

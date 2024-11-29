@@ -1,7 +1,9 @@
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
+use std::sync::LazyLock;
 
 mod private {
     pub trait Sealed {}
@@ -70,6 +72,17 @@ impl Hash for DynSingleScope {
     }
 }
 
+impl FromStr for DynSingleScope {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let Some(s) = ALL_SCOPE_MAP.get(s) else {
+            return Err("no matching scope found");
+        };
+        Ok(*s)
+    }
+}
+
 impl fmt::Display for DynSingleScope {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -91,24 +104,43 @@ impl From<DynSingleScope> for &'static dyn SingleScope {
 impl private::Sealed for DynSingleScope {}
 
 impl SingleScope for DynSingleScope {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self.0.as_any()
     }
 
+    #[inline]
     fn as_dyn(&self) -> DynSingleScope {
         *self
     }
 
+    #[inline]
     fn as_str(&self) -> &'static str {
         self.0.as_str()
     }
 
+    #[inline]
     fn equals(&self, other: &dyn SingleScope) -> bool {
         self.0.equals(other)
     }
 
+    #[inline]
     fn hash_value(&self) -> u64 {
         self.0.hash_value()
+    }
+}
+
+impl Scope for DynSingleScope {
+    fn scope(&self) -> HashSet<DynSingleScope> {
+        [*self].into()
+    }
+
+    fn scope_str(&self) -> HashSet<&'static str> {
+        [self.as_str()].into()
+    }
+
+    fn boxed_clone(&self) -> BoxScope {
+        box_scope!(*self)
     }
 }
 
@@ -339,6 +371,34 @@ scope! {
     calendar.settings.readonly;
     calendar.addons.execute;
 }
+
+macro_rules! apply_all_scope {
+    ($m:ident) => {
+        $m! {
+            calendar,
+            calendar.readonly,
+            calendar.events,
+            calendar.events.readonly,
+            calendar.settings.readonly,
+            calendar.addons.execute
+        }
+    };
+}
+
+macro_rules! scope_pairs {
+    [ $( $i0:ident $(. $i:ident )* ),* ] => { ::paste::paste! { [ $(
+        ([< $i0:camel $($i:camel)* >]::STR, DynSingleScope(& [< $i0:camel $($i:camel)* >] ))
+    ),* ] } };
+}
+
+pub const ALL_SCOPE_PAIRS: &[(&str, DynSingleScope)] = &apply_all_scope!(scope_pairs);
+
+fn all_scope_map() -> HashMap<&'static str, DynSingleScope> {
+    ALL_SCOPE_PAIRS.iter().copied().collect()
+}
+
+pub static ALL_SCOPE_MAP: LazyLock<HashMap<&'static str, DynSingleScope>> =
+    LazyLock::new(all_scope_map);
 
 /// ```
 /// let combined = google_oauth::combine_scope![calendar, calendar.readonly];

@@ -5,6 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use serde::{de, Deserialize, Serialize};
+
 mod private {
     pub trait Sealed {}
 }
@@ -101,6 +103,24 @@ impl From<DynSingleScope> for &'static dyn SingleScope {
     }
 }
 
+impl Serialize for DynSingleScope {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for DynSingleScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(DynSingleScopeVisitor)
+    }
+}
+
 impl private::Sealed for DynSingleScope {}
 
 impl SingleScope for DynSingleScope {
@@ -141,6 +161,23 @@ impl Scope for DynSingleScope {
 
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(*self)
+    }
+}
+
+struct DynSingleScopeVisitor;
+
+impl<'de> de::Visitor<'de> for DynSingleScopeVisitor {
+    type Value = DynSingleScope;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a str representing a single scope")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse().map_err(E::custom)
     }
 }
 

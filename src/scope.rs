@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use serde::{de, Deserialize, Serialize};
+mod serde;
 
 mod private {
     pub trait Sealed {}
@@ -108,24 +108,6 @@ impl From<DynSingleScope> for &'static dyn SingleScope {
     }
 }
 
-impl Serialize for DynSingleScope {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(self.0.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for DynSingleScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(DynSingleScopeVisitor)
-    }
-}
-
 impl private::Sealed for DynSingleScope {}
 
 impl SingleScope for DynSingleScope {
@@ -170,23 +152,6 @@ impl Scope for DynSingleScope {
 
     fn space_delimited(&self) -> SpaceDelimitedScope {
         vec![*self].into()
-    }
-}
-
-struct DynSingleScopeVisitor;
-
-impl<'de> de::Visitor<'de> for DynSingleScopeVisitor {
-    type Value = DynSingleScope;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a str representing a single scope")
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        v.parse().map_err(E::custom)
     }
 }
 
@@ -269,24 +234,6 @@ impl From<Vec<DynSingleScope>> for SpaceDelimitedScope {
     }
 }
 
-impl Serialize for SpaceDelimitedScope {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for SpaceDelimitedScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(SpaceDelimitedScopeVisitor)
-    }
-}
-
 impl private::Sealed for SpaceDelimitedScope {}
 
 impl Scope for SpaceDelimitedScope {
@@ -305,23 +252,6 @@ impl Scope for SpaceDelimitedScope {
     #[inline]
     fn space_delimited(&self) -> SpaceDelimitedScope {
         self.clone()
-    }
-}
-
-struct SpaceDelimitedScopeVisitor;
-
-impl<'de> de::Visitor<'de> for SpaceDelimitedScopeVisitor {
-    type Value = SpaceDelimitedScope;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a str of space-delimited scope")
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        v.parse().map_err(E::custom)
     }
 }
 
@@ -500,45 +430,8 @@ macro_rules! scope {
                 vec![self.as_dyn()].into()
             }
         }
-
-        impl ::serde::Serialize for [< $i0:camel $( $i:camel )* >] {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: ::serde::Serializer,
-            {
-                serializer.serialize_str(Self::STR)
-            }
-        }
-
-        impl<'de> ::serde::Deserialize<'de> for [< $i0:camel $( $i:camel )* >] {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: ::serde::de::Deserializer<'de>,
-            {
-                deserializer.deserialize_str([< $i0:camel $( $i:camel )* Visitor >])
-            }
-        }
-
-        struct [< $i0:camel $( $i:camel )* Visitor >];
-
-        impl<'de> ::serde::de::Visitor<'de> for [< $i0:camel $( $i:camel )* Visitor >] {
-            type Value = [< $i0:camel $( $i:camel )* >];
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, r#"a str "{}""#, [< $i0:camel $( $i:camel )* >]::STR)
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: ::serde::de::Error,
-            {
-                v.parse().map_err(E::custom)
-            }
-        }
     )+ } };
 }
-
-use scope;
 
 // https://developers.google.com/identity/protocols/oauth2/scopes#calendar
 scope! {
@@ -562,6 +455,8 @@ macro_rules! apply_all_scope {
         }
     };
 }
+
+use {apply_all_scope, scope};
 
 macro_rules! scope_pairs {
     [ $( $i0:ident $(. $i:ident )* ),* ] => { ::paste::paste! { [ $(

@@ -26,11 +26,13 @@ pub trait SingleScope: private::Sealed + Send + Sync + 'static {
 }
 
 pub trait Scope: private::Sealed + Send + Sync + 'static {
-    fn scope(&self) -> HashSet<&'static str>;
+    fn scope(&self) -> HashSet<DynSingleScope>;
+
+    fn scope_str(&self) -> HashSet<&'static str>;
 
     fn grants(&self, other: &dyn SingleScope) -> bool {
-        let other = other.as_str();
-        self.scope().contains(other)
+        let other = other.as_dyn();
+        self.scope().contains(&other)
     }
 
     fn boxed_clone(&self) -> BoxScope;
@@ -111,7 +113,12 @@ impl private::Sealed for NoScope {}
 
 impl Scope for NoScope {
     #[inline]
-    fn scope(&self) -> HashSet<&'static str> {
+    fn scope(&self) -> HashSet<DynSingleScope> {
+        HashSet::new()
+    }
+
+    #[inline]
+    fn scope_str(&self) -> HashSet<&'static str> {
         HashSet::new()
     }
 
@@ -131,8 +138,12 @@ pub struct BoxScope(Box<dyn Scope>);
 impl private::Sealed for BoxScope {}
 
 impl Scope for BoxScope {
-    fn scope(&self) -> HashSet<&'static str> {
+    fn scope(&self) -> HashSet<DynSingleScope> {
         self.0.scope()
+    }
+
+    fn scope_str(&self) -> HashSet<&'static str> {
+        self.0.scope_str()
     }
 
     fn boxed_clone(&self) -> BoxScope {
@@ -148,7 +159,7 @@ impl Clone for BoxScope {
 
 impl fmt::Debug for BoxScope {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("BoxScope").field(&self.scope()).finish()
+        f.debug_tuple("BoxScope").field(&self.scope_str()).finish()
     }
 }
 
@@ -163,10 +174,18 @@ where
     B: Scope,
     Self: Clone,
 {
-    fn scope(&self) -> HashSet<&'static str> {
+    fn scope(&self) -> HashSet<DynSingleScope> {
         let Self(a, b) = self;
         let mut scope_a = a.scope();
         let scope_b = b.scope();
+        scope_a.extend(scope_b);
+        scope_a
+    }
+
+    fn scope_str(&self) -> HashSet<&'static str> {
+        let Self(a, b) = self;
+        let mut scope_a = a.scope_str();
+        let scope_b = b.scope_str();
         scope_a.extend(scope_b);
         scope_a
     }
@@ -222,8 +241,8 @@ macro_rules! scope {
                 self
             }
 
-            fn as_dyn(&self) -> &'static dyn SingleScope {
-                &Self
+            fn as_dyn(&self) -> DynSingleScope {
+                DynSingleScope(&Self)
             }
 
             fn as_str(&self) -> &'static str {
@@ -242,7 +261,11 @@ macro_rules! scope {
         }
 
         impl Scope for [< $i0:camel $( $i:camel )* >] {
-            fn scope(&self) -> HashSet<&'static str> {
+            fn scope(&self) -> HashSet<DynSingleScope> {
+                [self.as_dyn()].into_iter().collect()
+            }
+
+            fn scope_str(&self) -> HashSet<&'static str> {
                 [Self::STR].into_iter().collect()
             }
 

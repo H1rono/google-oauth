@@ -56,7 +56,8 @@ impl UnauthorizedClient {
         } = self;
         let client_id = encode!(client_id);
         let redirect_uri = encode!(redirect_uri);
-        let scope = encode!(scope.scope().into_iter().collect::<Vec<_>>().join(" "));
+        let scope = scope.scope_str().into_iter().collect::<Vec<_>>().join(" ");
+        let scope = encode!(scope);
         let query = [
             format!("client_id={client_id}"),
             format!("redirect_uri={redirect_uri}"),

@@ -13,7 +13,7 @@ macro_rules! box_scope {
     };
 }
 
-pub trait SingleScope: private::Sealed + Send + Sync + 'static {
+pub trait SingleScope: private::Sealed + fmt::Debug + Send + Sync + 'static {
     fn as_any(&self) -> &dyn Any;
 
     fn as_dyn(&self) -> DynSingleScope;
@@ -52,7 +52,7 @@ pub trait Scope: private::Sealed + Send + Sync + 'static {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct DynSingleScope(&'static dyn SingleScope);
 
 impl PartialEq for DynSingleScope {

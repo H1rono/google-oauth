@@ -454,3 +454,37 @@ macro_rules! combine_scope {
         )*
     } } };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calendar_ser() {
+        let payload = format!(r#""{}""#, Calendar::STR);
+        let ser = serde_json::to_string(&Calendar).unwrap();
+        assert_eq!(ser, payload);
+    }
+
+    #[test]
+    fn test_calendar_de() {
+        let payload = format!(r#""{}""#, Calendar::STR);
+        let scope: Calendar = serde_json::from_str(&payload).unwrap();
+        assert_eq!(scope, Calendar);
+    }
+
+    #[test]
+    fn test_dyn_single_scope_ser() {
+        let payload = format!(r#""{}""#, Calendar::STR);
+        let scope = Calendar.as_dyn();
+        let ser = serde_json::to_string(&scope).unwrap();
+        assert_eq!(ser, payload);
+    }
+
+    #[test]
+    fn test_dyn_single_scope_de() {
+        let payload = format!(r#""{}""#, Calendar::STR);
+        let scope: DynSingleScope = serde_json::from_str(&payload).unwrap();
+        assert_eq!(scope, Calendar.as_dyn());
+    }
+}

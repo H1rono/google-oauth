@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt};
+use std::any::Any;
+use std::collections::HashSet;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 mod private {
     pub trait Sealed {}
@@ -13,7 +16,7 @@ macro_rules! box_scope {
 pub trait SingleScope: private::Sealed + Send + Sync + 'static {
     fn as_any(&self) -> &dyn Any;
 
-    fn as_dyn(&self) -> &'static dyn SingleScope;
+    fn as_dyn(&self) -> DynSingleScope;
 
     fn as_str(&self) -> &'static str;
 
@@ -44,6 +47,60 @@ pub trait Scope: private::Sealed + Send + Sync + 'static {
         Self: Sized,
     {
         box_scope!(self)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct DynSingleScope(&'static dyn SingleScope);
+
+impl PartialEq for DynSingleScope {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.equals(other.0)
+    }
+}
+
+impl Eq for DynSingleScope {}
+
+impl Hash for DynSingleScope {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let v = self.0.hash_value();
+        v.hash(state);
+    }
+}
+
+impl From<&'static dyn SingleScope> for DynSingleScope {
+    fn from(value: &'static dyn SingleScope) -> Self {
+        Self(value)
+    }
+}
+
+impl From<DynSingleScope> for &'static dyn SingleScope {
+    fn from(value: DynSingleScope) -> Self {
+        value.0
+    }
+}
+
+impl private::Sealed for DynSingleScope {}
+
+impl SingleScope for DynSingleScope {
+    fn as_any(&self) -> &dyn Any {
+        self.0.as_any()
+    }
+
+    fn as_dyn(&self) -> DynSingleScope {
+        *self
+    }
+
+    fn as_str(&self) -> &'static str {
+        self.0.as_str()
+    }
+
+    fn equals(&self, other: &dyn SingleScope) -> bool {
+        self.0.equals(other)
+    }
+
+    fn hash_value(&self) -> u64 {
+        self.0.hash_value()
     }
 }
 

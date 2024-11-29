@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -205,6 +206,104 @@ impl Scope for NoScope {
     #[inline]
     fn boxed_clone(&self) -> BoxScope {
         box_scope!(*self)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct SpaceDelimitedScope(Vec<DynSingleScope>);
+
+impl AsRef<[DynSingleScope]> for SpaceDelimitedScope {
+    fn as_ref(&self) -> &[DynSingleScope] {
+        &self.0
+    }
+}
+
+impl Borrow<[DynSingleScope]> for SpaceDelimitedScope {
+    fn borrow(&self) -> &[DynSingleScope] {
+        &self.0
+    }
+}
+
+impl FromStr for SpaceDelimitedScope {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let inner = s
+            .split(' ')
+            .map(|s| s.parse())
+            .collect::<Result<Vec<DynSingleScope>, _>>()
+            .map_err(|e| e.to_string())?;
+        Ok(inner.into())
+    }
+}
+
+impl fmt::Display for SpaceDelimitedScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some((first, tail)) = self.0.split_first() else {
+            return Ok(());
+        };
+        write!(f, "{first}")?;
+        for s in tail {
+            write!(f, " {s}")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<Vec<DynSingleScope>> for SpaceDelimitedScope {
+    fn from(value: Vec<DynSingleScope>) -> Self {
+        Self(value)
+    }
+}
+
+impl Serialize for SpaceDelimitedScope {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpaceDelimitedScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(SpaceDelimitedScopeVisitor)
+    }
+}
+
+impl private::Sealed for SpaceDelimitedScope {}
+
+impl Scope for SpaceDelimitedScope {
+    fn scope(&self) -> HashSet<DynSingleScope> {
+        self.0.iter().copied().collect()
+    }
+
+    fn scope_str(&self) -> HashSet<&'static str> {
+        self.0.iter().map(SingleScope::as_str).collect()
+    }
+
+    fn boxed_clone(&self) -> BoxScope {
+        box_scope!(self.clone())
+    }
+}
+
+struct SpaceDelimitedScopeVisitor;
+
+impl<'de> de::Visitor<'de> for SpaceDelimitedScopeVisitor {
+    type Value = SpaceDelimitedScope;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a str of space-delimited scope")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse().map_err(E::custom)
     }
 }
 
@@ -486,5 +585,39 @@ mod tests {
         let payload = format!(r#""{}""#, Calendar::STR);
         let scope: DynSingleScope = serde_json::from_str(&payload).unwrap();
         assert_eq!(scope, Calendar.as_dyn());
+    }
+
+    #[test]
+    fn test_space_delimited_scope_ser() {
+        let payload = format!(
+            r#""{} {} {} {}""#,
+            Calendar, CalendarReadonly, CalendarEvents, CalendarEventsReadonly
+        );
+        let scope: SpaceDelimitedScope = vec![
+            Calendar.as_dyn(),
+            CalendarReadonly.as_dyn(),
+            CalendarEvents.as_dyn(),
+            CalendarEventsReadonly.as_dyn(),
+        ]
+        .into();
+        let ser = serde_json::to_string(&scope).unwrap();
+        assert_eq!(ser, payload);
+    }
+
+    #[test]
+    fn test_space_delimited_scope_de() {
+        let payload = format!(
+            r#""{} {} {} {}""#,
+            Calendar, CalendarReadonly, CalendarEvents, CalendarEventsReadonly
+        );
+        let scope: SpaceDelimitedScope = vec![
+            Calendar.as_dyn(),
+            CalendarReadonly.as_dyn(),
+            CalendarEvents.as_dyn(),
+            CalendarEventsReadonly.as_dyn(),
+        ]
+        .into();
+        let de: SpaceDelimitedScope = serde_json::from_str(&payload).unwrap();
+        assert_eq!(de, scope);
     }
 }

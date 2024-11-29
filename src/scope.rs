@@ -11,9 +11,15 @@ macro_rules! box_scope {
 }
 
 pub trait SingleScope: private::Sealed + Send + Sync + 'static {
+    fn as_any(&self) -> &dyn Any;
+
     fn as_dyn(&self) -> &'static dyn SingleScope;
 
     fn as_str(&self) -> &'static str;
+
+    fn equals(&self, other: &dyn SingleScope) -> bool;
+
+    fn hash_value(&self) -> u64;
 }
 
 pub trait Scope: private::Sealed + Send + Sync + 'static {
@@ -155,12 +161,26 @@ macro_rules! scope {
         impl private::Sealed for [< $i0:camel $( $i:camel )* >] {}
 
         impl SingleScope for [< $i0:camel $( $i:camel )* >] {
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+
             fn as_dyn(&self) -> &'static dyn SingleScope {
                 &Self
             }
 
             fn as_str(&self) -> &'static str {
                 Self::STR
+            }
+
+            fn equals(&self, other: &dyn SingleScope) -> bool {
+                other.as_any().downcast_ref::<Self>().is_some()
+            }
+
+            fn hash_value(&self) -> u64 {
+                let mut hasher = ::std::hash::DefaultHasher::new();
+                ::std::hash::Hash::hash(self, &mut hasher);
+                ::std::hash::Hasher::finish(&hasher)
             }
         }
 

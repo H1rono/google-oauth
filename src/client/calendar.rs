@@ -78,13 +78,6 @@ mod calendar_list {
         fn token(&self) -> &Token {
             self.inner.token()
         }
-
-        pub fn list(&self) -> Result<list::Request<'a>, InsufficientScopeError> {
-            if !contain_scope!([calendar, calendar.readonly] in &self.token().scope) {
-                return Err(InsufficientScopeError::new());
-            }
-            Ok(list::Request::new(*self))
-        }
     }
 
     mod list {
@@ -101,6 +94,16 @@ mod calendar_list {
         pub struct Request<'a> {
             pub(crate) client: Client<'a>,
             pub(crate) parameters: Parameters,
+        }
+
+        impl<'a> Client<'a> {
+            pub fn list(&self) -> Result<Request<'a>, InsufficientScopeError> {
+                if contain_scope!([calendar, calendar.readonly] in &self.token().scope) {
+                    Ok(Request::new(*self))
+                } else {
+                    Err(InsufficientScopeError::new())
+                }
+            }
         }
 
         impl<'a> Request<'a> {

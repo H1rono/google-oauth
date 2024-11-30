@@ -392,10 +392,10 @@ pub struct AuthorizedClient {
 macro_rules! request_fn {
     (
         $(#[$m:meta])*
-        $n:ident
+        $v:vis $n:ident
     ) => { ::paste::paste! {
         $(#[$m])*
-        pub fn [<  $n:snake:lower >] (&self, uri: &str) -> ::reqwest::RequestBuilder {
+        $v fn [< $n:snake:lower >] (&self, uri: &str) -> ::reqwest::RequestBuilder {
             self.request(::http::Method::[< $n:snake:upper >], uri)
         }
     } };
@@ -423,11 +423,11 @@ impl AuthorizedClient {
         self.decorate_request(req)
     }
 
-    request_fn! {get}
-    request_fn! {post}
-    request_fn! {patch}
-    request_fn! {put}
-    request_fn! {delete}
+    request_fn! {pub get}
+    request_fn! {pub post}
+    request_fn! {pub patch}
+    request_fn! {pub put}
+    request_fn! {pub delete}
 
     pub(crate) fn decorate_request(
         &self,

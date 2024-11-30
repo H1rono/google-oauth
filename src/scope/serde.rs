@@ -1,19 +1,19 @@
 use std::fmt;
 
-use ::serde::{de, Deserialize, Serialize};
+use ::serde::{de, ser};
 
 use super::{DynSingleScope, SpaceDelimitedScope};
 
-impl Serialize for DynSingleScope {
+impl ser::Serialize for DynSingleScope {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: ser::Serializer,
     {
         serializer.serialize_str(self.0.as_str())
     }
 }
 
-impl<'de> Deserialize<'de> for DynSingleScope {
+impl<'de> de::Deserialize<'de> for DynSingleScope {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -39,7 +39,7 @@ impl<'de> de::Visitor<'de> for DynSingleScopeVisitor {
     }
 }
 
-impl Serialize for SpaceDelimitedScope {
+impl ser::Serialize for SpaceDelimitedScope {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -48,7 +48,7 @@ impl Serialize for SpaceDelimitedScope {
     }
 }
 
-impl<'de> Deserialize<'de> for SpaceDelimitedScope {
+impl<'de> de::Deserialize<'de> for SpaceDelimitedScope {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -78,7 +78,7 @@ macro_rules! serde_for_scope {
     { $(
         $i0:ident $(. $i:ident)*
     ),* } => { ::paste::paste! { $(
-        impl ::serde::Serialize for super::[< $i0:camel $( $i:camel )* >] {
+        impl ser::Serialize for super::[< $i0:camel $( $i:camel )* >] {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: ::serde::Serializer,
@@ -87,10 +87,10 @@ macro_rules! serde_for_scope {
             }
         }
 
-        impl<'de> ::serde::Deserialize<'de> for super::[< $i0:camel $( $i:camel )* >] {
+        impl<'de> de::Deserialize<'de> for super::[< $i0:camel $( $i:camel )* >] {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: ::serde::de::Deserializer<'de>,
+                D: de::Deserializer<'de>,
             {
                 deserializer.deserialize_str([< $i0:camel $( $i:camel )* Visitor >])
             }
@@ -98,7 +98,7 @@ macro_rules! serde_for_scope {
 
         struct [< $i0:camel $( $i:camel )* Visitor >];
 
-        impl<'de> ::serde::de::Visitor<'de> for [< $i0:camel $( $i:camel )* Visitor >] {
+        impl<'de> de::Visitor<'de> for [< $i0:camel $( $i:camel )* Visitor >] {
             type Value = super::[< $i0:camel $( $i:camel )* >];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -107,7 +107,7 @@ macro_rules! serde_for_scope {
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
-                E: ::serde::de::Error,
+                E: de::Error,
             {
                 v.parse().map_err(E::custom)
             }

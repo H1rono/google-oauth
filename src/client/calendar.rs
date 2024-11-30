@@ -3,7 +3,7 @@
 
 use crate::WebClientSecret;
 
-use super::{AuthorizedClient, InsufficientScopeError, TokenResponse};
+use super::{AuthorizedClient, InsufficientScopeError, Token};
 
 macro_rules! contain_scope {
     ( [
@@ -41,7 +41,7 @@ impl<'a> CalendarClient<'a> {
     }
 
     #[inline]
-    fn token(&self) -> &TokenResponse {
+    fn token(&self) -> &Token {
         &self.inner.token
     }
 }
@@ -75,7 +75,7 @@ mod calendar_list {
         }
 
         #[inline]
-        fn token(&self) -> &TokenResponse {
+        fn token(&self) -> &Token {
             self.inner.token()
         }
 

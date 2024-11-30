@@ -101,7 +101,7 @@ impl UnauthorizedClient {
                 "application/x-www-form-urlencoded",
             )
             .body(request.urlencoded());
-        let response: TokenResponse = request.send().await?.json().await?;
+        let response: Token = request.send().await?.json().await?;
         let authorized = AuthorizedClient::new(secret.clone(), response);
         Ok(authorized)
     }
@@ -374,7 +374,7 @@ impl<'de> de::Visitor<'de> for BearerVisitor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct TokenResponse {
+pub struct Token {
     access_token: String,
     expires_in: u32,
     #[serde(default)]
@@ -387,7 +387,7 @@ pub struct TokenResponse {
 pub struct AuthorizedClient {
     #[allow(dead_code)]
     secret: WebClientSecret,
-    token: TokenResponse,
+    token: Token,
     inner: reqwest::Client,
 }
 
@@ -406,7 +406,7 @@ macro_rules! request_fn {
 impl AuthorizedClient {
     pub const BASE_URL: &'static str = "https://www.googleapis.com";
 
-    fn new(secret: WebClientSecret, token: TokenResponse) -> Self {
+    fn new(secret: WebClientSecret, token: Token) -> Self {
         let inner = reqwest::Client::new();
         Self {
             secret,
@@ -415,7 +415,7 @@ impl AuthorizedClient {
         }
     }
 
-    pub fn token(&self) -> &TokenResponse {
+    pub fn token(&self) -> &Token {
         &self.token
     }
 

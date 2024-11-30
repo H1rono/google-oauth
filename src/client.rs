@@ -34,31 +34,22 @@ impl UnauthorizedClient {
     }
 
     pub fn generate_url(&self) -> String {
-        macro_rules! encode {
-            ($e:expr) => {{
-                let e = $e;
-                ::percent_encoding::utf8_percent_encode(&e, ::percent_encoding::NON_ALPHANUMERIC)
-                    .to_string()
-            }};
-        }
+        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
-        let Self {
-            secret:
-                WebClientSecret {
-                    client_id,
-                    auth_uri,
-                    ..
-                },
-            config:
-                ClientConfig {
-                    redirect_uri,
-                    scope,
-                },
+        let Self { secret, config, .. } = self;
+        let WebClientSecret {
+            client_id,
+            auth_uri,
             ..
-        } = self;
-        let client_id = encode!(client_id);
-        let redirect_uri = encode!(redirect_uri);
-        let scope = encode!(scope.to_string());
+        } = secret;
+        let ClientConfig {
+            redirect_uri,
+            scope,
+        } = config;
+        let client_id = utf8_percent_encode(client_id, NON_ALPHANUMERIC);
+        let redirect_uri = utf8_percent_encode(redirect_uri, NON_ALPHANUMERIC);
+        let scope = scope.to_string();
+        let scope = utf8_percent_encode(&scope, NON_ALPHANUMERIC);
         let query = [
             format!("client_id={client_id}"),
             format!("redirect_uri={redirect_uri}"),
@@ -71,7 +62,7 @@ impl UnauthorizedClient {
         format!("{auth_uri}?{query}")
     }
 
-    pub async fn authorize_with<'a, S>(&'a self, code: S) -> anyhow::Result<AuthorizedClient>
+    pub async fn acquire_token_with<'a, S>(&'a self, code: S) -> reqwest::Result<Token>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -102,8 +93,20 @@ impl UnauthorizedClient {
             )
             .body(request.urlencoded());
         let response: Token = request.send().await?.json().await?;
-        let authorized = AuthorizedClient::new(secret.clone(), response);
-        Ok(authorized)
+        Ok(response)
+    }
+
+    pub async fn authorize_with_code<'a, S>(&'a self, code: S) -> reqwest::Result<AuthorizedClient>
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        let token = self.acquire_token_with(code).await?;
+        Ok(self.autorize_with_token(token))
+    }
+
+    #[inline]
+    pub fn autorize_with_token(&self, token: Token) -> AuthorizedClient {
+        AuthorizedClient::new(self.secret.clone(), token)
     }
 }
 
@@ -406,15 +409,16 @@ macro_rules! request_fn {
 impl AuthorizedClient {
     pub const BASE_URL: &'static str = "https://www.googleapis.com";
 
-    fn new(secret: WebClientSecret, token: Token) -> Self {
-        let inner = reqwest::Client::new();
+    #[inline]
+    pub fn new(secret: WebClientSecret, token: Token) -> Self {
         Self {
             secret,
             token,
-            inner,
+            inner: reqwest::Client::new(),
         }
     }
 
+    #[inline]
     pub fn token(&self) -> &Token {
         &self.token
     }
@@ -431,6 +435,7 @@ impl AuthorizedClient {
     request_fn! {pub put}
     request_fn! {pub delete}
 
+    #[inline]
     pub(crate) fn decorate_request(
         &self,
         request: reqwest::RequestBuilder,

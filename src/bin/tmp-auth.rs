@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
     let serve = serve.into_future().map_err(anyhow::Error::new);
     let (code, ()) = tokio::try_join!(wait_code, serve)?;
 
-    let client = client.authorize_with(code).await?;
+    let client = client.authorize_with_code(code).await?;
     let export = export_token(&client);
     let check = check_client(&client);
     tokio::try_join!(export, check)?;

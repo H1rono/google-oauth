@@ -342,10 +342,10 @@ where
 }
 
 macro_rules! scope {
-    ( $(
+    { $(
         $( #[$m:meta] )*
         $i0:ident $(. $i:ident)* ;
-    )+ ) => { ::paste::paste! { $(
+    )+ } => { ::paste::paste! { $(
         $( #[$m:meta] )*
         #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
         pub struct [< $i0:camel $( $i:camel )* >];
@@ -411,11 +411,11 @@ macro_rules! scope {
 
         impl Scope for [< $i0:camel $( $i:camel )* >] {
             fn scope(&self) -> HashSet<DynSingleScope> {
-                [self.as_dyn()].into_iter().collect()
+                [self.as_dyn()].into()
             }
 
             fn scope_str(&self) -> HashSet<&'static str> {
-                [Self::STR].into_iter().collect()
+                [Self::STR].into()
             }
 
             fn grants(&self, other: &dyn SingleScope) -> bool {
@@ -459,7 +459,9 @@ macro_rules! apply_all_scope {
 use {apply_all_scope, scope};
 
 macro_rules! scope_pairs {
-    [ $( $i0:ident $(. $i:ident )* ),* ] => { ::paste::paste! { [ $(
+    [ $(
+        $i0:ident $(. $i:ident )*
+    ),* ] => { ::paste::paste! { [ $(
         ([< $i0:camel $($i:camel)* >]::STR, DynSingleScope(& [< $i0:camel $($i:camel)* >] ))
     ),* ] } };
 }

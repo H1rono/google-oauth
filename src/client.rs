@@ -390,13 +390,15 @@ pub struct AuthorizedClient {
 }
 
 macro_rules! request_fn {
-    ($m:ident) => {
-        ::paste::paste! {
-            pub fn [<  $m:snake:lower >] (&self, uri: &str) -> ::reqwest::RequestBuilder {
-                self.request(::http::Method::[< $m:snake:upper >], uri)
-            }
+    (
+        $(#[$m:meta])*
+        $n:ident
+    ) => { ::paste::paste! {
+        $(#[$m])*
+        pub fn [<  $n:snake:lower >] (&self, uri: &str) -> ::reqwest::RequestBuilder {
+            self.request(::http::Method::[< $n:snake:upper >], uri)
         }
-    };
+    } };
 }
 
 impl AuthorizedClient {

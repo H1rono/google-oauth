@@ -75,7 +75,9 @@ impl<'de> de::Visitor<'de> for SpaceDelimitedScopeVisitor {
 }
 
 macro_rules! serde_for_scope {
-    [ $( $i0:ident $(. $i:ident)* ),* ] => { ::paste::paste! { $(
+    { $(
+        $i0:ident $(. $i:ident)*
+    ),* } => { ::paste::paste! { $(
         impl ::serde::Serialize for super::[< $i0:camel $( $i:camel )* >] {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -110,7 +112,6 @@ macro_rules! serde_for_scope {
                 v.parse().map_err(E::custom)
             }
         }
-
     )* } };
 }
 

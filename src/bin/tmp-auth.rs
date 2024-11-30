@@ -115,13 +115,8 @@ async fn export_token(client: &AuthorizedClient) -> anyhow::Result<()> {
 
 #[tracing::instrument(skip_all)]
 async fn check_client(client: &AuthorizedClient) -> anyhow::Result<()> {
-    let res = client
-        .get("/calendar/v3/users/me/calendarList")
-        .send()
-        .await?;
-    tracing::info!(status = ?res.status(), headers = ?res.headers());
-    let body: serde_json::Value = res.json().await?;
-    let body = serde_json::to_string_pretty(&body)?;
+    let res = client.calendar().calendar_list().list()?.send().await?;
+    let body = serde_json::to_string_pretty(&res)?;
     tracing::info!("{body}");
     Ok(())
 }

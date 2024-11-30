@@ -5,6 +5,8 @@ use serde::{de, Deserialize, Serialize};
 use crate::scope::{self, Scope, SpaceDelimitedScope};
 use crate::secret::WebClientSecret;
 
+pub mod calendar;
+
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub redirect_uri: String,
@@ -434,5 +436,15 @@ impl AuthorizedClient {
         request: reqwest::RequestBuilder,
     ) -> reqwest::RequestBuilder {
         request.bearer_auth(&self.token.access_token)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
+#[error("insufficient scope to perform request")]
+pub struct InsufficientScopeError(());
+
+impl InsufficientScopeError {
+    pub(crate) fn new() -> Self {
+        Self(())
     }
 }

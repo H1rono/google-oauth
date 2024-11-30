@@ -331,4 +331,77 @@ mod calendar_list {
         // FIXME
         pub type Response = serde_json::Value;
     }
+
+    mod get {
+        use super::*;
+
+        /// https://developers.google.com/calendar/api/v3/reference/calendarList/get
+        #[derive(Clone)]
+        pub struct Request<'a> {
+            pub(crate) client: Client<'a>,
+            pub(crate) parameters: Parameters,
+        }
+
+        impl<'a> Client<'a> {
+            pub fn get(&self, calendar_id: &str) -> Result<Request<'a>, InsufficientScopeError> {
+                if contain_scope!([calendar, calendar.readonly] in &self.token().scope) {
+                    Ok(Request::new(*self, calendar_id))
+                } else {
+                    Err(InsufficientScopeError::new())
+                }
+            }
+        }
+
+        impl<'a> Request<'a> {
+            pub(super) fn new(client: Client<'a>, calendar_id: &str) -> Self {
+                Self {
+                    client,
+                    parameters: Parameters::new(calendar_id),
+                }
+            }
+
+            pub fn replace_parameters<F>(self, with: F) -> Self
+            where
+                F: FnOnce(Parameters) -> Parameters,
+            {
+                let Self { client, parameters } = self;
+                Self {
+                    client,
+                    parameters: with(parameters),
+                }
+            }
+
+            pub async fn send(self) -> reqwest::Result<Response> {
+                let Self { client, parameters } = self;
+                let uri = parameters.into_uri();
+                let res: Response = client
+                    .request(http::Method::GET, &uri)
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
+                Ok(res)
+            }
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub struct Parameters {
+            calendar_id: String,
+        }
+
+        impl Parameters {
+            pub fn new(calendar_id: &str) -> Self {
+                Self {
+                    calendar_id: calendar_id.to_string(),
+                }
+            }
+
+            pub fn into_uri(self) -> String {
+                format!("/{}", self.calendar_id)
+            }
+        }
+
+        // FIXME
+        pub type Response = serde_json::Value;
+    }
 }

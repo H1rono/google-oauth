@@ -419,9 +419,8 @@ impl AuthorizedClient {
 
     pub fn request(&self, method: http::Method, uri: &str) -> reqwest::RequestBuilder {
         let url = format!("{}{uri}", Self::BASE_URL);
-        self.inner
-            .request(method, url)
-            .bearer_auth(&self.token.access_token)
+        let req = self.inner.request(method, url);
+        self.decorate_request(req)
     }
 
     request_fn! {get}
@@ -429,4 +428,11 @@ impl AuthorizedClient {
     request_fn! {patch}
     request_fn! {put}
     request_fn! {delete}
+
+    pub(crate) fn decorate_request(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> reqwest::RequestBuilder {
+        request.bearer_auth(&self.token.access_token)
+    }
 }

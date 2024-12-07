@@ -76,7 +76,9 @@ async fn wait_code_with_notify(
 async fn unauthorized_client() -> anyhow::Result<UnauthorizedClient> {
     let secret_file = tokio::fs::File::open("tmp/client_secret.json").await?;
     let scope = google_oauth::combine_scope![calendar, calendar.readonly];
-    let secret = ClientSecret::read_from_file(secret_file).await?;
+    let secret = ClientSecret::read_from_file(secret_file)
+        .await?
+        .override_from_env(None);
     let client = UnauthorizedClient::builder()
         .redirect_uri("http://localhost:8080/oauth2/callback")
         .scope(scope)

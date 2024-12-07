@@ -8,7 +8,7 @@ use crate::secret::WebClientSecret;
 pub mod calendar;
 mod misc;
 
-pub use misc::{AuthorizationCode, Bearer};
+pub use misc::{AuthorizationCode, Bearer, RefreshToken};
 
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
@@ -262,6 +262,16 @@ pub struct Token {
     token_type: Bearer,
 }
 
+impl Token {
+    pub fn refresh_with(self, other: Token) -> Self {
+        let Self { refresh_token, .. } = self;
+        Self {
+            refresh_token,
+            ..other
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AuthorizedClient {
     #[allow(dead_code)]
@@ -317,6 +327,63 @@ impl AuthorizedClient {
         request: reqwest::RequestBuilder,
     ) -> reqwest::RequestBuilder {
         request.bearer_auth(&self.token.access_token)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn refresh(self) -> anyhow::Result<Self> {
+        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+
+        let Self {
+            secret,
+            token,
+            inner,
+        } = self;
+        let WebClientSecret {
+            client_id,
+            client_secret,
+            token_uri,
+            ..
+        } = &secret;
+        let Some(refresh_token) = &token.refresh_token else {
+            anyhow::bail!("refresh_token is not provided");
+        };
+        let grant_type = RefreshToken::new();
+        let client_id = utf8_percent_encode(client_id, NON_ALPHANUMERIC);
+        let client_secret = utf8_percent_encode(client_secret, NON_ALPHANUMERIC);
+        let refresh_token = utf8_percent_encode(refresh_token, NON_ALPHANUMERIC);
+        let query = [
+            format!("client_id={client_id}"),
+            format!("client_secret={client_secret}"),
+            format!("refresh_token={refresh_token}"),
+            format!("grant_type={grant_type}"),
+        ];
+        let body = query.join("&");
+        let request = inner
+            .post(token_uri)
+            .header(
+                http::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
+            .body(body);
+        let response: Token = request
+            .send()
+            .await
+            .inspect_err(|err| {
+                let err = err as &dyn std::error::Error;
+                tracing::error!(err, "could not send request");
+            })?
+            .json()
+            .await
+            .inspect_err(|err| {
+                let err = err as &dyn std::error::Error;
+                tracing::error!(err, "could not parse response body as JSON");
+            })?;
+        let token = token.refresh_with(response);
+        Ok(Self {
+            secret,
+            token,
+            inner,
+        })
     }
 }
 

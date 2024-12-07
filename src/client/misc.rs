@@ -67,6 +67,70 @@ impl<'de> de::Visitor<'de> for AuthorizationCodeVisitor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RefreshToken(());
+
+struct RefreshTokenVisitor;
+
+impl RefreshToken {
+    pub const STR: &'static str = "refresh_token";
+
+    pub(super) fn new() -> Self {
+        Self(())
+    }
+}
+
+impl fmt::Display for RefreshToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(Self::STR)
+    }
+}
+
+impl FromStr for RefreshToken {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == Self::STR {
+            Ok(Self::new())
+        } else {
+            Err("not refresh_token")
+        }
+    }
+}
+
+impl Serialize for RefreshToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(Self::STR)
+    }
+}
+
+impl<'de> Deserialize<'de> for RefreshToken {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(RefreshTokenVisitor)
+    }
+}
+
+impl<'de> de::Visitor<'de> for RefreshTokenVisitor {
+    type Value = RefreshToken;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(r#"a str "refresh_token""#)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse().map_err(E::custom)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bearer(());
 
 struct BearerVisitor;
